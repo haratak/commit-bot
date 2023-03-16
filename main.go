@@ -101,7 +101,8 @@ func getStagedDiff(repo *git.Repository) (string, error) {
 			newContent := string(newContentBytes)
 
 			diffs := dmp.DiffMain(oldContent, newContent, false)
-			diffStr += dmp.DiffPrettyText(diffs) + "\n"
+			diffStr += fmt.Sprintf("index 0644\n--- a/%s\n+++ b/%s\n%s",
+				filePath, filePath, dmp.DiffPrettyText(diffs)) + "\n"
 		}
 	}
 
@@ -109,18 +110,15 @@ func getStagedDiff(repo *git.Repository) (string, error) {
 }
 
 func generateCommitMessage(client *openai.Client, diff string) (string, error) {
-	prompt := fmt.Sprintf("Given the following diff of staged changes in a Git repository, generate a commit message:\n\n%s\n\nCommit message:", diff)
-
-	request := &openai.CompletionRequest{
-		Model:       "davinci-codex",
-		Prompt:      prompt,
-		MaxTokens:   30,
-		Temperature: 0.5,
-		N:           1,
+	prompt := fmt.Sprintf("Write a commit message in Japanese describing the changes and the reasons for them\n\n%s", diff)
+	request := &openai.ChatCompletionRequest{
+		Model:     openai.GPT3Dot5Turbo,
+		Messages:  []openai.ChatCompletionMessage{{Role: "user", Content: prompt}},
+		MaxTokens: 100,
 	}
 
 	ctx := context.Background()
-	response, err := client.CreateCompletion(ctx, *request)
+	response, err := client.CreateChatCompletion(ctx, *request)
 	if err != nil {
 		return "", err
 	}
@@ -129,5 +127,5 @@ func generateCommitMessage(client *openai.Client, diff string) (string, error) {
 		return "", fmt.Errorf("no suggestions received")
 	}
 
-	return strings.TrimSpace(response.Choices[0].Text), nil
+	return strings.TrimSpace(response.Choices[0].Message.Content), nil
 }
